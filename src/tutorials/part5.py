@@ -1,5 +1,6 @@
-"""Add assimilators and basic expansion logic"""
+"""Add logic to attack enemy"""
 import sc2
+import random
 from sc2 import run_game, maps, Race, Difficulty
 from sc2.player import Bot, Computer
 from sc2.constants import NEXUS, PROBE, PYLON, ASSIMILATOR, GATEWAY, CYBERNETICSCORE, STALKER
@@ -14,6 +15,7 @@ class JanusBot(sc2.BotAI):
         await self.expand()
         await self.build_gateway_and_cybernetics_core()
         await self.train_stalkers()
+        await self.attack()
 
     """Trains workers as long as we can afford them"""
     async def build_workers(self):
@@ -59,11 +61,11 @@ class JanusBot(sc2.BotAI):
             pylon = self.units(PYLON).ready.random
             if self.can_afford(GATEWAY):
                 self.build(GATEWAY, near=pylon)
-            if self.units(GATEWAY).ready.exists:
-                if not self.units(CYBERNETICSCORE):
-                    if self.can_afford(CYBERNETICSCORE) and not self.already_pending(CYBERNETICSCORE):
-                        await self.build(CYBERNETICSCORE, near=pylon)
-            else:  # if GATEWAY doesn't already exist
+            if self.units(GATEWAY).ready.exists and not self.units(CYBERNETICSCORE):
+                if self.can_afford(CYBERNETICSCORE) and not self.already_pending(CYBERNETICSCORE):
+                    await self.build(CYBERNETICSCORE, near=pylon)
+
+            elif len(self.units(GATEWAY)) < 3:
                 if self.can_afford(GATEWAY) and not self.already_pending(GATEWAY):
                     await self.build(GATEWAY, near=pylon)
 
@@ -74,8 +76,27 @@ class JanusBot(sc2.BotAI):
                 if self.can_afford(STALKER) and self.supply_left > 0:
                     await self.do(gateway.train(STALKER))
 
+    """"Logic for finding target.  Prioritize last known enemy units first, then last known enemy structures, then enemy start location"""
+
+    def find_target(self, state):
+        if len(self.known_enemy_units) > 0:
+            return random.choice(self.known_enemy_units)
+        elif len(self.known_enemy_structures) > 0:
+            return random.choice(self.known_enemy_structures)
+        else:
+            return self.enemy_start_locations[0]
+    """Attack when the number of stalkers exceeds 15, otherwise play defensively"""
+    async def attack(self):
+        if self.units(STALKER).amount > 15:
+            for s in self.units(STALKER).idle:
+                await self.do(s.attack(self.find_target(self.state)))
+        elif self.units(STALKER).amount > 5:
+            if len(self.known_enemy_units) > 0:
+                for s in self.units(STALKER).idle:
+                    await self.do(s.attack(random.choice(self.known_enemy_units)))
+
 
 run_game(maps.get("AbyssalReefLE"), [
     Bot(Race.Protoss, JanusBot()),
-    Computer(Race.Terran, Difficulty.Easy)
+    Computer(Race.Terran, Difficulty.Hard)
 ], realtime=False)
