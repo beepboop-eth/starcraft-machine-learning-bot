@@ -1,4 +1,4 @@
-"""Add logic to attack enemy"""
+"""Defeats Medium AI"""
 import sc2
 import random
 from sc2 import run_game, maps, Race, Difficulty
